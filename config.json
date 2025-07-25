@@ -1,0 +1,64 @@
+{
+  "Jenkins_Dashboard_Config":{
+    "ip_address": "http://<ip address>",
+    "port":"4000",
+    "config": [ 
+      {
+        "type": "<project 1 name>",
+        "jenkins_group_job_url": "https://<jenkins server>/job/<project>/job",
+        "jenkins_jobs": "<build job name>",
+        "jenkins_test_jobs_regex":"<regular expression for detecting test jobs>",
+        "database_table": "<name of table in database>"
+      },
+      {
+        "type": "<project 2 name>",
+        "jenkins_group_job_url": "https://<jenkins server>/job/<project>/job",
+        "jenkins_jobs": "<build job name>",
+        "jenkins_test_jobs_regex":"<regular expression for detecting test jobs>",
+        "database_table": "<name of table in database>"
+      },
+      {
+        "type": "<project 3 name>",
+        "jenkins_group_job_url": "https://<jenkins server>/job/<project>/job",
+        "jenkins_jobs": "<build job name>",
+        "jenkins_test_jobs_regex":"<regular expression for detecting test jobs>",
+        "database_table": "<name of table in database>"
+      }
+    ]
+  },
+  "Github_Dashboard_Config":{
+    "ip_address": "http://<ip address>",
+    "port":"5000",
+    "pull_request_active_period": 60,
+    "labels": ["<label 1>", "<label2>"],
+    "config":[
+      {
+        "type": "<project 1 name>",
+        "github_server":"https://<github server>",
+        "github_organization":"<github organization>",
+        "github_meta_repository":"<name of repository>",
+        "target_branch": "<name of branch to be merged into>",
+        "meta_pr_database_table":"<name of pull request table in database>",
+        "sub_pr_database_table":"<name of sub request table in database (optional)>"
+      },
+      {
+        "type": "<project 2 name>",
+        "github_server":"https://<github server>",
+        "github_organization":"<github organization>",
+        "github_meta_repository":"<name of repository>",
+        "target_branch": "<name of branch to be merged into>",
+        "meta_pr_database_table":"<name of pull request table in database>",
+        "sub_pr_database_table":"<name of sub request table in database (optional)>"
+      },
+      {
+        "type": "<project 3 name>",
+        "github_server":"https://<github server>",
+        "github_organization":"<github organization>",
+        "github_meta_repository":"<name of repository>",
+        "target_branch": "<name of branch to be merged into>",
+        "meta_pr_database_table":"<name of pull request table in database>",
+        "sub_pr_database_table":"<name of sub request table in database (optional)>"
+      }
+    ]
+  }
+}

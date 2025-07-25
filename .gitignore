@@ -1,0 +1,5 @@
+*/__pycache__/*
+venv/*
+cict_dashboard/database/*.db
+githubPR_dashboard/database/*.db
+**/app.log

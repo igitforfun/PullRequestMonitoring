@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Jenkins Jobs Dashboard</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px;
+            border: 1px solid black;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        input[type="text"], input[type="date"] {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .date-container {
+            display: inline-block;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .short-date {
+            width: 90px; /* Adjust the width as needed */
+        }
+        .value-positive {
+            background-color: #d4edda;
+        }
+        .value-negative {
+            background-color: #f8d7da;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border: 1px solid #ccc;
+            background: #f2f2f2;
+            cursor: pointer;
+            outline: none;
+            margin-right: 5px;
+            border-radius: 5px 5px 0 0;
+            color: #333;
+            transition: background 0.2s;
+        }
+        .tab-btn.pressed {
+            background: #28a745;
+            color: #fff;
+            border-bottom: 2px solid #218838;
+        }
+    </style>
+    <script>
+        function filterTable() {
+            const table = document.getElementById("resultsTable");
+            const tr = table.getElementsByTagName("tr");
+            const filters = document.querySelectorAll(".filter-input");
+
+            for (let i = 1; i < tr.length; i++) {
+                tr[i].style.display = "none";
+                const td = tr[i].getElementsByTagName("td");
+                let showRow = true;
+
+                for (let j = 0; j < td.length; j++) {
+                    if (filters[j].value) {
+                        if (td[j].innerHTML.toUpperCase().indexOf(filters[j].value.toUpperCase()) === -1) {
+                            showRow = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (showRow) {
+                    tr[i].style.display = "";
+                }
+            }
+        }
+        // one date input field for all forms
+        function copyDateValues(form) {
+            const dateFrom = document.getElementById('date_from').value;
+            const dateTo = document.getElementById('date_to').value;
+            form.querySelector('input[name="date_from"]').value = dateFrom;
+            form.querySelector('input[name="date_to"]').value = dateTo;
+        }      
+        // Set date values from hidden fields
+        // Load date values from hidden fields when the page is loaded
+        window.onload = function() {
+            const dateFrom = document.getElementById('hidden_date_from').value;
+            const dateTo = document.getElementById('hidden_date_to').value;
+            if (dateFrom) {
+                document.getElementById('date_from').value = dateFrom;
+            }
+            if (dateTo) {
+                document.getElementById('date_to').value = dateTo;
+            }
+            const pressedTab = document.querySelector('.tab-btn.pressed');
+            if (pressedTab) {
+                window.selectedVariant = pressedTab.getAttribute('data-variant');
+            }
+        }
+        function setTabPressed(button) {
+            document.querySelectorAll('.tab-btn').forEach(tab => tab.classList.remove('pressed'));
+            button.classList.add('pressed');
+            window.selectedVariant = button.getAttribute('data-variant');
+            console.log("button pressed, selectedVariant:", window.selectedVariant)
+        }
+        function setVariant(form) {
+            form.querySelector('input[name="selected_variant"]').value = window.selectedVariant
+        }
+    </script>
+</head>
+<body>
+    <h1>CICT dashboard</h1>
+    <div id="jenkins-tabs" style="margin-bottom: 20px;">
+        {% for jenkins in config%}
+            <button class="tab-btn{% if loop.first %} pressed{% endif %}" onclick="setTabPressed(this)" data-variant="{{ jenkins['type'] }}">{{ jenkins['type'] }}</button>
+        {% endfor %}
+    </div>
+    <div class="date-container">
+        <label for="date_from">Date From:</label>
+        <input type="date" id="date_from" name="date_from" class="short-date">
+        <label for="date_to">Date To:</label>
+        <input type="date" id="date_to" name="date_to" class="short-date">
+    </div>
+    <input type="hidden" id="hidden_date_from" value="{{ request.form.get('date_from', '') }}">
+    <input type="hidden" id="hidden_date_to" value="{{ request.form.get('date_to', '') }}">
+    <!-- default range is one week -->
+    <script>
+        const dateFrom = new Date();
+        dateFrom.setDate(dateFrom.getDate() - 7);
+        document.getElementById('date_from').valueAsDate = dateFrom;
+        document.getElementById('date_to').valueAsDate = new Date();
+    </script>
+    <h1>Statistics</h1>
+    <!-- statisctic -->
+     <!-- Hide the form temporary until needed -->
+    <form method="post" action="/statistics" onsubmit="copyDateValues(this)" style="display:none;">
+
+        <input type="hidden" name="date_from">
+        <input type="hidden" name="date_to">
+        <button type="submit">Generate Statistics</button>
+    </form>
+    <!-- run querry -->
+    <h2>Run SQL Query</h1>
+    <form method="post" action="/query" onsubmit="copyDateValues(this); setVariant(this);">
+        <input type="hidden" name="date_from">
+        <input type="hidden" name="date_to">
+        <input type="hidden" name="selected_variant">
+        <textarea name="sql" rows="4" cols="50">{{ query or '' }}</textarea><br>
+        <button type="submit">Run Query</button>
+    </form>
+    <!-- export -->
+    <!-- Hide the form temporary until needed -->
+    <form method="post" action="/export" onsubmit="copyDateValues(this)" style="display:none;">
+        <input type="hidden" name="date_from">
+        <input type="hidden" name="date_to">
+        <button type="submit">Export to Excel</button>
+    </form>
+    {% if statistics %}
+        <h3>Statistics Result:</h3>
+        <p>{{ statistics }}</p>
+    {% endif %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <script>
+                {% for category, message in messages %}
+                    alert("{{ message }}");
+                {% endfor %}
+            </script>
+        {% endif %}
+    {% endwith %}
+    {% if results %}
+        <h2>Results: {{variant}}</h2>
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    {% for key in results[0].keys() %}
+                        <th>{{ key }}</th>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    {% for key in results[0].keys() %}
+                        <th><input type="text" class="filter-input" onkeyup="filterTable()" placeholder="Filter {{ key }}"></th>
+                    {% endfor %}
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id = 'tableData'>
+                {% for row in results %}
+                    <tr>
+                        {% for key, value in row.items() %}
+                            {% if key == "pull_request_number" or key == "ci_build_id" %}
+                                {% if key =="pull_request_number" %}
+                                    <td class="{{ 'value-positive' if row['result'] == 'SUCCESS' else 'value-negative' }}"><a href="{{ value }}" target="_blank">{{ (value|string).split('/')[-1] }}</a></td>
+                                {% else %}
+                                    <td class="{{ 'value-positive' if row['result'] == 'SUCCESS' else 'value-negative' }}"><a href="{{buildlink}}/{{ value }}" target="_blank">{{ value }}</a></td>
+                                {% endif %}
+                            {% else %}
+                                <td class="{{ 'value-positive' if row['result'] == 'SUCCESS' else 'value-negative' }}" style="white-space: pre-wrap;">{{ value|safe }}</td>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+            <script>
+                function linkifyText(elementId) {
+                    const tableBody = document.getElementById(elementId);
+                    const rows = tableBody.getElementsByTagName("tr");
+                    for (let row of rows) {
+                        const cells = row.getElementsByTagName("td");
+                        for (let cell of cells) {
+                            const cellContent = cell.innerHTML.trim();
+                            // Check if the cell contains an actual URL
+                            if (cellContent.startsWith("https://")) {
+                                cell.innerHTML = `<a href="${cellContent}" target="_blank">${cellContent}</a>`;
+                            }
+                        }
+                    }
+                }
+                // Call the function on the table body
+                linkifyText('tableData');
+            </script>
+        </table>
+
+    {% elif query %}
+        <p>No results or query executed successfully.</p>
+    {% endif %}
+
+    {% if error %}
+        <h2 style="color:red;">Error:</h2>
+        <p>{{ error }}</p>
+    {% endif %}
+</body>
+</html>

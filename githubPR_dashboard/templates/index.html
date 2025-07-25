@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Pull Request Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+	<script>
+		window.onload = function() {
+            const pressedTab = document.querySelector('.tab-btn.pressed');
+            if (pressedTab) {
+                window.selectedVariant = pressedTab.getAttribute('data-variant');
+            }
+        }
+		function setTabPressed(button) {
+            document.querySelectorAll('.tab-btn').forEach(tab => tab.classList.remove('pressed'));
+            button.classList.add('pressed');
+            window.selectedVariant = button.getAttribute('data-variant');
+            console.log("button pressed, selectedVariant:", window.selectedVariant)
+        }
+        function setVariant(form) {
+            form.querySelector('input[name="selected_variant"]').value = window.selectedVariant
+        }
+	</script>
+</head>
+<body>
+    <h2><center>Pull Requests</center></h2>
+    <div id="project-tabs" style="margin-bottom: 20px;">
+        {% for projects in config%}
+            <button class="tab-btn{% if loop.first %} pressed{% endif %}" onclick="setTabPressed(this)" data-variant="{{ projects['type'] }}">{{ projects['type'] }}</button>
+        {% endfor %}
+    </div>
+	<div style="margin-bottom: 20px;">
+		<h2>Run SQL Query</h2>
+		<textarea id="sqlQuery" rows="5" cols="80" placeholder="tables: {{ config | map(attribute='meta_pr_database_table') | join(',') }}" >SELECT * FROM {{config[0]['meta_pr_database_table']}};</textarea><br>
+		<button onclick="runSQLQuery()" style="margin-top: 8px;">Run Query</button>
+		<button onclick="resetQuery()" style="margin-left: 10px;">Load Active PRs</button>
+
+	</div>
+
+    <table id="prTable">
+        <thead>
+            <tr>
+                <th style="position: relative;">
+				  PR No.
+				  <button class="filter-btn" onclick="togglePRNoFilter(event)">&#x1F50D;</button>
+				</th>
+
+                <th>PR Link</th>
+                <th>Review Status</th>
+                <th>Merge Conflicts</th>
+                <th>PR Status</th>
+                <th>Owner</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <script>
+	
+    let lastSortColumn = null;
+    let sortDirection = 'asc';
+	
+	async function runSQLQuery() {
+		const query = document.getElementById('sqlQuery').value.trim();
+		if (!query) {
+			alert("Please enter a SQL query.");
+			return;
+		}
+
+		const response = await fetch('/run_query', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ query })
+		});
+		document.getElementById('sqlQuery').value = '';
+		const result = await response.json();
+
+		if (result.error) {
+			alert("SQL Error: " + result.error);
+			return;
+		}
+
+		customLoadPRTable(result);
+	}
+
+	function resetQuery() {
+		document.getElementById('sqlQuery').value = '';
+		loadPRs(); // Re-fetch full data from the database
+	}
+
+    async function loadPRs() {
+		const variant = window.selectedVariant || '';
+		if (variant == ''){
+			const pressedTab = document.querySelector('.tab-btn.pressed');
+			if (pressedTab) {
+				window.selectedVariant = pressedTab.getAttribute('data-variant');
+			}
+		}
+        const response = await fetch(`/get_data?variant=${encodeURIComponent(window.selectedVariant)}`);
+        let data = await response.json();
+        const tbody = document.querySelector('#prTable tbody');
+        tbody.innerHTML = '';
+
+        const columnOrder = [
+            "PR No.",
+            "PR Link",
+            "Review Status",
+            "Merge Conflicts",
+            "PR Status",
+            "Owner"
+        ];
+        // Build table rows
+        data.forEach(async (row) => {
+            const tr = document.createElement('tr');
+
+            columnOrder.forEach(key => {
+                const td = document.createElement('td');
+                if (key === 'PR Link') {
+                    const link = document.createElement('a');
+                    link.href = row[key];
+                    link.textContent = row[key];
+                    link.target = '_blank';
+                    link.style.color = 'blue';
+                    link.style.textDecoration = 'none';
+                    td.appendChild(link);
+                } else if (key === 'PR Status') {
+                    td.textContent = row[key] === 'open' ? 'Open' : 'Draft';
+                } else {
+                    td.textContent = row[key];
+                }
+                tr.appendChild(td);
+            });
+
+            const actionTd = document.createElement('td');
+            actionTd.classList.add('button-container');
+
+            const permissions = await fetch(`/get-permissions?id=${row["PR No."]}`)
+                .then(res => res.json());
+
+            const buttons = [
+                { key: 'checkReview', label: 'Review Status' },
+                { key: 'checkConflict', label: 'Merge Conflict' },
+                { key: 'checkStatus', label: 'PR Status' }
+            ];
+
+			buttons.forEach(btnInfo => {
+			const btn = document.createElement("button");
+			btn.textContent = btnInfo.label;
+			const key = `${row["PR No."]}-${btnInfo.label}`;
+			const stored = localStorage.getItem(key);
+			const isEnabled = permissions[btnInfo.key];
+			if (stored) {
+			  const elapsed = Date.now() - stored;
+			  if (elapsed < 43200000) {
+				btn.disabled = true;
+				btn.classList.add('active-timer');
+
+				// Auto re-enable after remaining time
+				setTimeout(() => {
+				  btn.disabled = false;
+				  btn.classList.remove('active-timer');
+				  localStorage.removeItem(key);
+				}, 43200000 - elapsed);
+			  }
+			}			
+			btn.style.backgroundColor = isEnabled ? 'red' : '#4CAF50';
+			btn.style.opacity = isEnabled ? '1' : '0.6';
+			btn.style.cursor = isEnabled ? 'pointer' : 'not-allowed';
+
+			if (isEnabled) {
+				btn.onclick = () => {
+				    if (btn.disabled) return;
+					  const timestamp = Date.now();
+					  localStorage.setItem(key, timestamp.toString());
+                      btn.classList.add('clicked');
+
+					  // 1. Simulate press effect
+					  btn.classList.add('clicked');
+
+					  // 2. After 3s, apply active color
+					  setTimeout(() => {
+						btn.classList.remove('clicked');
+						btn.classList.add('active-timer');
+						btn.disabled = true;
+					  }, 3000);
+
+					  // 4. Re-enable after 12 hrs
+					  setTimeout(() => {
+						btn.classList.remove('active-timer');
+						btn.disabled = false;
+						localStorage.removeItem(key);
+					  }, 43200000);
+
+					fetch('/button_action', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							pr_no: row["PR No."],
+							user: row["Owner"],
+							action: btnInfo.label
+						})
+					})
+					.then(res => res.json())
+					.then(data => alert(data.message));
+				};
+			}
+
+			actionTd.appendChild(btn);
+		});
+
+
+            tr.appendChild(actionTd);
+            tbody.appendChild(tr);
+        });
+    }
+
+    loadPRs();
+	
+	function customLoadPRTable(data) {
+    const tbody = document.querySelector('#prTable tbody');
+    tbody.innerHTML = '';
+
+    const columnOrder = [
+        "PR No.",
+        "PR Link",
+        "Review Status",
+        "Merge Conflicts",
+        "PR Status",
+        "Owner"
+    ];
+
+    data.forEach(async (row) => {
+        const tr = document.createElement('tr');
+
+        columnOrder.forEach(key => {
+            const td = document.createElement('td');
+            if (key === 'PR Link') {
+                const link = document.createElement('a');
+                link.href = row[key];
+                link.textContent = row[key];
+                link.target = '_blank';
+                link.style.color = 'blue';
+                link.style.textDecoration = 'none';
+                td.appendChild(link);
+            } else {
+                td.textContent = row[key];
+            }
+            tr.appendChild(td);
+        });
+
+        const actionTd = document.createElement('td');
+        actionTd.classList.add('button-container');
+
+        const permissions = await fetch(`/get-permissions?id=${row["PR No."]}`)
+            .then(res => res.json());
+
+        const buttons = [
+            { key: 'checkReview', label: 'Review Status' },
+            { key: 'checkConflict', label: 'Merge Conflict' },
+            { key: 'checkStatus', label: 'PR Status' }
+        ];
+
+        buttons.forEach(btnInfo => {
+			const btn = document.createElement('button');
+			const key = `${row["PR No."]}-${btnInfo.label}`;
+			const stored = localStorage.getItem(key);
+			if (stored) {
+			const elapsed = Date.now() - parseInt(stored);
+			if (elapsed < 43200000) {
+				btn.disabled = true;
+				btn.classList.add('active-timer');
+				// Auto re-enable after remaining time
+				setTimeout(() => {
+				btn.disabled = false;
+				btn.classList.remove('active-timer');
+				localStorage.removeItem(key);
+				}, 43200000 - elapsed);
+			}
+			}
+			const isEnabled = permissions[btnInfo.key];
+			btn.textContent = btnInfo.label;
+
+			btn.style.backgroundColor = isEnabled ? 'red' : '#4CAF50';
+			btn.style.opacity = isEnabled ? '1' : '0.6';
+			btn.style.cursor = isEnabled ? 'pointer' : 'not-allowed';
+
+			if (isEnabled) {
+				btn.onclick = () => {
+					if (btn.disabled) return;
+
+					const key = `${row["PR No."]}-${btnInfo.label}`;
+					const timestamp = Date.now();
+
+					// 1. Simulate press effect
+					btn.classList.add('clicked');
+
+					// 2. Store time in localStorage
+					localStorage.setItem(key, timestamp.toString());
+					// 2. After 3s, apply active color
+					setTimeout(() => {
+						btn.classList.remove('clicked');
+						btn.classList.add('active-timer');
+						btn.disabled = true;
+					}, 3000);
+
+					// 3. Revert after 12 hrs (43200000ms)
+					setTimeout(() => {
+						btn.classList.remove('active-timer');
+						btn.disabled = false;
+						localStorage.removeItem(key);
+					}, 43200000);
+
+					fetch('/button_action', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							pr_no: row["PR No."],
+							user: row["Owner"],
+							action: btnInfo.label
+						})
+					})
+					.then(res => res.json())
+					.then(data => alert(data.message));
+				};
+			}
+
+			actionTd.appendChild(btn);
+		});
+        tr.appendChild(actionTd);
+        tbody.appendChild(tr);
+    });
+}
+
+    </script>
+</body>
+</html>
