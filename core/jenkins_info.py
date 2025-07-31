@@ -98,8 +98,11 @@ class JenkinsJob:
         return self.get_variable_from_apixml(pattern=r'<number>'+ str(build_num) +r'</number>')
 
     def get_build_result(self, build_num):
-        job_result = self.get_variable_from_apixml(r'<result>(.*)</result>', str(build_num))[0]
-        return job_result
+        job_result = self.get_variable_from_apixml(r'<result>(.*)</result>', str(build_num))
+        if len(job_result) == 0:
+            return "running"
+        else:
+            return job_result
         
     def get_triggered_ct_jobs(self, pattern, build_num):
         ct_job_list = self.get_variable_from_urlcontent(pattern, str(build_num))

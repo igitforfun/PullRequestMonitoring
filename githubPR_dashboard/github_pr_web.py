@@ -331,14 +331,17 @@ def get_all_open_pr(github, target_branch, org_repository, meta_pr_table, pr_set
 
     sqlcmd= sql_command(DATABASE_FILE)
     for mpr in pull_requests:
-        data_dict=sqlcmd.create_dictionary_from_table(meta_pr_table)
-        data_dict['last_updated'] = get_last_updated_datetime(mpr)
-        data_dict['mpr_num'] = mpr.number
-        data_dict['meta_link'] = mpr.html_url
-        data_dict["owner"] = mpr.user.login
-        data_dict['mpr_status'], data_dict['merge_conflict'], data_dict['review_status'] = get_pr_review_merge_status(mpr)
-        logger.info(f"PR data dict {data_dict}") 
-        prs.append(data_dict.copy())
+        if mpr.state == 'open':
+            data_dict=sqlcmd.create_dictionary_from_table(meta_pr_table)
+            data_dict['last_updated'] = get_last_updated_datetime(mpr)
+            data_dict['mpr_num'] = mpr.number
+            data_dict['meta_link'] = mpr.html_url
+            data_dict["owner"] = mpr.user.login
+            data_dict['mpr_status'], data_dict['merge_conflict'], data_dict['review_status'] = get_pr_review_merge_status(mpr)
+            logger.info(f"PR data dict {data_dict}") 
+            prs.append(data_dict.copy())
+        else:
+            logger.info(f"pull request {mpr.number} was recently closed/merged.")
     sqlcmd.close_database()
     return prs
 
@@ -611,6 +614,9 @@ def update_active_PRs_statusses():
                     sql_cmd.execute_update_command(sub_pr_data_dict, sub_pr_tb, 'sub_pr_num')
                     logger.info(f"updating {db_sub_pr_row_tuple} -> {tuple(sub_pr_data_dict.values())}")
             logger.info(f"Update done for PR {row[0]}")
+
+        open_pr_tuple = tuple(open_pr.number for open_pr in github_inst.get_all_pull_requests(f'{org}/{meta_repo}',target_branch,'open'))
+        clean_database(open_pr_tuple, meta_pr_tb, sub_pr_tb)
 
 if __name__ == '__main__':
     logger.info('Starting Github PR dashboard application')

@@ -153,7 +153,7 @@ class CICTWebApp:
         """
         self.app.run(debug=True, host='0.0.0.0', port=self.port)
 
-def update_database():
+def update_database(scheduled=False):
     logger.info(f'Starting database update in thread: {threading.current_thread().name}')
     for jenkins_instance in conf_info.json_data['config']:
         conf_info.switch_project_type(jenkins_instance['type'])
@@ -185,6 +185,9 @@ def update_database():
         else:
             last_ci_build = first_ci_build_no
             logger.info(f'First build detected is {first_ci_build_no}')
+
+        if scheduled == True:
+            last_ci_build = max_db_ci_build_no - 5
 
         for ci in range(last_ci_build, no_ci_jobs+1):
             if ci_overview_jk.check_build_exists(ci) and not ci_overview_jk.is_build_replay(ci):
@@ -224,16 +227,28 @@ def update_database():
                                     cict_dict['error_logs'] = "unable to identify error"
                             else:
                                 cict_dict = handle_unstable_aborted_build(build_result, cict_dict, ci_overview_jk)
-                        sql_cmd.insert_dictionary_to_table(cict_dict, DB_TABLE)
+                        db_row = sql_cmd.execute_query_fetchone(f"SELECT * FROM {DB_TABLE} WHERE ct_build_number = {cict_dict['ct_build_number']}")
+                        if db_row:
+                            if (tuple(cict_dict.values()) != db_row):
+                                logger.info(f"Updating row where ct_build_number = {cict_dict['ct_build_number']}")
+                                sql_cmd.execute_update_command(cict_dict, DB_TABLE, 'ct_build_number')
+                        else:
+                            sql_cmd.insert_dictionary_to_table(cict_dict, DB_TABLE)
                         logger.info(f'all data of jenkin build job {cict_dict}')
                 else:
                     build_result= ci_overview_jk.get_build_result(ci)
                     if (build_result == 'FAILURE'):
-                        cict_dict['result'] == 'FAILURE'
+                        cict_dict['result'] = 'FAILURE'
                         cict_dict['error_type'], cict_dict['error_logs'] = ci_overview_jk.get_ci_error(ci)
                     else:
                         cict_dict = handle_unstable_aborted_build(build_result, cict_dict, ci_overview_jk)
-                    sql_cmd.insert_dictionary_to_table(cict_dict, DB_TABLE)
+                    db_row = sql_cmd.execute_query_fetchone(f"SELECT * FROM {DB_TABLE} WHERE ci_build_id = {cict_dict['ci_build_id']}")
+                    if db_row:
+                        if (tuple(cict_dict.values()) != db_row):
+                            logger.info(f"Updating row where ct_build_number = {cict_dict['ct_build_number']}")
+                            sql_cmd.execute_update_command(cict_dict, DB_TABLE, 'ct_build_number')
+                    else:
+                        sql_cmd.insert_dictionary_to_table(cict_dict, DB_TABLE)
                     logger.info(f'all data of jenkin build job {cict_dict}')
         sql_cmd.close_database()
         logger.info('Database update completed')
@@ -339,7 +354,7 @@ def debug(url):
 
 def run_scheduled_tasks():
     # Schedule the update_ct_database function to run every hour
-    schedule.every().hour.do(update_database)
+    schedule.every().hour.do(lambda: update_database(scheduled=True))
     while True:
         schedule.run_pending()
         time.sleep(1)
